@@ -2,6 +2,7 @@ import click
 from PIL import Image, ImageMath
 
 MASKS = {
+    0: 0b00000000,
     1: 0b10000000,
     2: 0b11000000,
     3: 0b11100000,
@@ -9,6 +10,7 @@ MASKS = {
     5: 0b11111000,
     6: 0b11111100,
     7: 0b11111110,
+    8: 0b11111111,
 }
 
 def _merge(img1, img2, n=4):
