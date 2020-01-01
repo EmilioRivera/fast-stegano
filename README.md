@@ -1,4 +1,4 @@
-# Stegano using Pillow-SIMD
+# Steganography
 
-Quick repo doing steganography, inspired from another repo that I have yet to link.
+Quick repo doing steganography, inspired from this repository: https://github.com/kelvins/steganography, but using bitwise operations with Pillow-SIMD.
 
