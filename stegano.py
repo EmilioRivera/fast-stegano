@@ -36,9 +36,9 @@ def _full_merge(img1, img2, n=4):
     # We need to remove the LSB for each pixels
     cp_r, cp_g, cp_b = lsb_components(img1, n)
     r2, g2, b2 = img2.split()
-    o_r = ImageMath.eval("a + (b >> n) ", a=cp_r, b=r2, m=MASKS[8-n], n=8-n).convert('L')
-    o_g = ImageMath.eval("a + (b >> n) ", a=cp_g, b=g2, m=MASKS[8-n], n=8-n).convert('L')
-    o_b = ImageMath.eval("a + (b >> n) ", a=cp_b, b=b2, m=MASKS[8-n], n=8-n).convert('L')
+    o_r = ImageMath.eval("a + (b >> n) ", a=cp_r, b=r2, n=8-n).convert('L')
+    o_g = ImageMath.eval("a + (b >> n) ", a=cp_g, b=g2, n=8-n).convert('L')
+    o_b = ImageMath.eval("a + (b >> n) ", a=cp_b, b=b2, n=8-n).convert('L')
     lsb_merged = Image.merge('RGB', (cp_r.convert('L'), cp_g.convert('L'), cp_b.convert('L')))
     output = Image.merge("RGB", (o_r, o_g, o_b))
     lsb_merged.paste(output)
