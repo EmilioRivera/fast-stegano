@@ -1,0 +1,2 @@
+Click==7.0
+Pillow-SIMD==6.0.0.post0
