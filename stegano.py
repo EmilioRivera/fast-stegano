@@ -79,8 +79,12 @@ def merge(img1, img2, output, n, full):
 @click.option('--img', required=True, type=str, help='Image that will be hidden')
 @click.option('--output', required=True, type=str, help='Output image')
 @click.option('-n', type=int, help='Number of bits to use')
-def unmerge(img, output, n):
+@click.option('--crop/--no-crop', default=False, help='Whether to crop the output image. Useful when image was saved with --full')
+def unmerge(img, output, n, crop):
     unmerged_image = _unmerge(Image.open(img), n)
+    if crop:
+        box = unmerged_image.getbbox()
+        unmerged_image = unmerged_image.crop(box)
     unmerged_image.save(output)
 
 
