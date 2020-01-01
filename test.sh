@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-MSB_VALUES=( 1 2 3 4 5 6 7 )
+MSB_VALUES=( 0 1 2 3 4 5 6 7 8 )
 INPUT_FILE="${INPUT_FILE:-input.jpg}"
 CONCEAL_FILE="${CONCEAL_FILE:-toconceal.jpg}"
 
