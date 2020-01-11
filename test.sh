@@ -8,8 +8,17 @@ mkdir -p 'test'
 # TODO: Put correct venv path or comment if not needed
 source './.stegano/bin/activate'
 
+echo "Pillow-SIMD method tests..."
 for n in "${MSB_VALUES[@]}"; do
     echo "$n"
     python stegano.py merge --img1 "$INPUT_FILE" --img2 "$CONCEAL_FILE" --output "test/concealed_${n}.png" -n "$n"
     python stegano.py unmerge --img "test/concealed_${n}.png" --output "test/reconstructed_${n}.png" -n "$n"
+done
+
+echo "Linear method tests..."
+for detail in "lossy" "lossless"; do
+    for noise in "fill-with-noise" "no-noise"; do
+        python linear_stegano.py merge --img1 "$INPUT_FILE" --img2 "$CONCEAL_FILE" "--$detail" "--$noise" --output "test/concealed_${detail}_${noise}.png"
+        python linear_stegano.py unmerge --img "test/concealed_${detail}_${noise}.png" "--$detail" --output "test/reconstructed_${detail}_${noise}.png"
+    done
 done
