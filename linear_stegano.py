@@ -29,7 +29,7 @@ def np8_to_number_16(np8_len_arr):
 #
 # Lossy linear steganography
 #
-def _construct_loss_with_dims(a,b):
+def _construct_loss_with_dims(a, b, add_noise=False):
     # 32 bits are needed to encode the length
     # Using n = 4 for the LSB, we need 8 entries to encode the length of the message.
     # We will occupy 9 entries, the last one being unused. Just to get a total of 3 pixels
@@ -48,6 +48,8 @@ def _construct_loss_with_dims(a,b):
     start, end = offset, offset + b.size
     hidden_noise[offset:end] = (b.ravel('C') & 0xF0) >> 4
     
+    if add_noise:
+        hidden_noise[end:] = np.random.randint(low=0x00, high=0x0F, size=a.size-end)
     
     # Discard the LSB from the fake up until the last fake data
     fake[:end] = fake[:end] & 0xF0
@@ -72,7 +74,7 @@ def _reconstruct_loss_with_dims(a):
 #
 # Lossless linear steganography
 # 
-def _construct_lossless_with_dims(a,b):
+def _construct_lossless_with_dims(a, b, add_noise=False):
     # 32 bits are needed to encode the length
     # Using n = 4 for the LSB, we need 8 entries to encode the length of the message.
     # We will occupy 9 entries, the last one being unused. Just to get a total of 3 pixels
@@ -111,6 +113,9 @@ def _construct_lossless_with_dims(a,b):
     stacked_arr = np.stack([red_noise, green_noise, blue_noise])
     hidden_noise[offset:end] = stacked_arr.ravel('C')
     
+    if add_noise:
+        hidden_noise[end:] = np.random.randint(low=0x00, high=0x0F, size=a.size-end)
+
     fake = fake.ravel('C') + hidden_noise
     return fake.reshape(a.shape)
 
@@ -133,10 +138,10 @@ def _reconstruct_lossless_with_dims(a):
     return width, height, output.reshape(width, height, 3)
 
 
-def merge_with_dims(base, secret, lossy):
+def merge_with_dims(base, secret, lossy, add_noise):
     a = np.asarray(base)
     b = np.asarray(secret)
-    fake_data = _construct_loss_with_dims(a, b) if lossy else _construct_lossless_with_dims(a, b)
+    fake_data = _construct_loss_with_dims(a, b, add_noise=add_noise) if lossy else _construct_lossless_with_dims(a, b, add_noise=add_noise)
     fake = Image.fromarray(fake_data.astype(np.uint8))
     return fake
 
@@ -157,9 +162,10 @@ def cli():
 @click.option('--img2', required=True, type=str, help='Image that will be hidden')
 @click.option('--output', required=True, type=str, help='Output image')
 @click.option('--lossy/--lossless', default=False, help='If the output should be lossy or lossless')
-def merge(img1, img2, output, lossy):
-    print('Using n = {} with method {}'.format(4, 'lossy' if lossy else 'lossless'))
-    merged_image = merge_with_dims(Image.open(img1), Image.open(img2), lossy=lossy)
+@click.option('--fill-with-noise/--no-noise', default=False, help='If the leftover space should contain noise')
+def merge(img1, img2, output, lossy, fill_with_noise):
+    print('Using n = {} with method {} - {}'.format(4, 'lossy' if lossy else 'lossless', 'filling with noise' if fill_with_noise else 'no noise'))
+    merged_image = merge_with_dims(Image.open(img1), Image.open(img2), lossy=lossy, add_noise=fill_with_noise)
     merged_image.save(output)
 
 
