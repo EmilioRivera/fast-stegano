@@ -55,16 +55,6 @@ def _construct_loss_with_dims(a,b):
     return fake.reshape(a.shape)
 
 
-def merge_lossy_with_dims(base, secret):
-    # We need to encode each pixel into the 4 LSB, resulting in twice the size
-    # assert base.width * base.height > secret.width * secret.height * 2
-    a = np.asarray(base)
-    b = np.asarray(secret)
-   
-    fake_data = _construct_loss_with_dims(a, b)
-    fake = Image.fromarray(fake_data.astype(np.uint8))
-    return fake
-
 def _reconstruct_loss_with_dims(a):
 #     print((a.ravel()[:9] & 0x0F) << 4)
     # Get the dimensions
@@ -79,12 +69,6 @@ def _reconstruct_loss_with_dims(a):
     return width, height, packed.reshape(width, height, 3)
 
 
-def unmerge_lossy_with_dims(base):
-    c = np.asarray(base, dtype=np.uint8)
-    w,h, f = _reconstruct_loss_with_dims(c)
-    i = Image.fromarray(f, mode='RGB')
-    return i
-
 #
 # Lossless linear steganography
 # 
@@ -93,6 +77,8 @@ def _construct_lossless_with_dims(a,b):
     # Using n = 4 for the LSB, we need 8 entries to encode the length of the message.
     # We will occupy 9 entries, the last one being unused. Just to get a total of 3 pixels
     offset = 9
+    # We need to encode each pixel into the 4 LSB, resulting in twice the size
+    # assert base.width * base.height > secret.width * secret.height * 2
     assert a.size >= offset + b.size * 2
 
     hidden_noise = np.zeros(a.size)
@@ -129,17 +115,6 @@ def _construct_lossless_with_dims(a,b):
     return fake.reshape(a.shape)
 
 
-def merge_lossless_with_dims(base, secret):
-    # We need to encode each pixel into the 4 LSB, resulting in twice the size
-    # assert base.width * base.height > secret.width * secret.height * 2
-    a = np.asarray(base)
-    b = np.asarray(secret)
-   
-    fake_data = _construct_lossless_with_dims(a, b)
-    fake = Image.fromarray(fake_data.astype(np.uint8))
-    return fake
-
-
 def _reconstruct_lossless_with_dims(a):
     # Get the dimensions
     flat = (a.ravel('C') & 0x0F)
@@ -157,9 +132,18 @@ def _reconstruct_lossless_with_dims(a):
     output[:,:,2] = (((rb[0::2]) << 4) + (rb[1::2])).reshape(width, height)
     return width, height, output.reshape(width, height, 3)
 
-def unmerge_lossless_with_dims(base):
+
+def merge_with_dims(base, secret, lossy):
+    a = np.asarray(base)
+    b = np.asarray(secret)
+    fake_data = _construct_loss_with_dims(a, b) if lossy else _construct_lossless_with_dims(a, b)
+    fake = Image.fromarray(fake_data.astype(np.uint8))
+    return fake
+
+
+def unmerge_with_dims(base, lossy):
     c = np.asarray(base, dtype=np.uint8)
-    w,h, f = _reconstruct_lossless_with_dims(c)
+    w, h, f = _reconstruct_loss_with_dims(c) if lossy else _reconstruct_lossless_with_dims(c)
     i = Image.fromarray(f, mode='RGB')
     return i
 
@@ -175,10 +159,7 @@ def cli():
 @click.option('--lossy/--lossless', default=False, help='If the output should be lossy or lossless')
 def merge(img1, img2, output, lossy):
     print('Using n = {} with method {}'.format(4, 'lossy' if lossy else 'lossless'))
-    if lossy:
-        merged_image = merge_lossy_with_dims(Image.open(img1), Image.open(img2))
-    else:
-        merged_image = merge_lossless_with_dims(Image.open(img1), Image.open(img2))
+    merged_image = merge_with_dims(Image.open(img1), Image.open(img2), lossy=lossy)
     merged_image.save(output)
 
 
@@ -187,10 +168,7 @@ def merge(img1, img2, output, lossy):
 @click.option('--output', required=True, type=str, help='Output image')
 @click.option('--lossy/--lossless', default=False, help='If the hidden image is lossy or lossless')
 def unmerge(img, output, lossy):
-    if lossy:
-        unmerged_image = unmerge_lossy_with_dims(Image.open(img))
-    else:
-        unmerged_image = unmerge_lossless_with_dims(Image.open(img))
+    unmerged_image = unmerge_with_dims(Image.open(img), lossy=lossy)
     unmerged_image.save(output)
 
 
