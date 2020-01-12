@@ -2,8 +2,9 @@ from PIL import Image
 import numpy as np
 import click
 
-# TODO: We could use the unused bits after the dimensions to encode
-# which type of steganography was employed
+# TODO: Better method encoding scheme
+METHOD_LOSSLESS = 0x01
+METHOD_LOSSY    = 0x02
 
 
 # Utilities
@@ -138,16 +139,31 @@ def _reconstruct_lossless_with_dims(a):
     return width, height, output.reshape(width, height, 3)
 
 
-def merge_with_dims(base, secret, lossy, add_noise):
+def _read_method(arr):
+    return arr.ravel('C')[8] & 0x0F
+
+
+def _engrave_method(arr, method):
+    arr.ravel('C')[8] |= method
+
+
+def merge_with_dims(base, secret, lossy, add_noise, engrave_method=False):
     a = np.asarray(base)
     b = np.asarray(secret)
     fake_data = _construct_loss_with_dims(a, b, add_noise=add_noise) if lossy else _construct_lossless_with_dims(a, b, add_noise=add_noise)
+    if engrave_method:
+        _engrave_method(fake_data, METHOD_LOSSY if lossy else METHOD_LOSSLESS)
     fake = Image.fromarray(fake_data.astype(np.uint8))
     return fake
 
 
-def unmerge_with_dims(base, lossy):
+def unmerge_with_dims(base, lossy, read_method=False):
     c = np.asarray(base, dtype=np.uint8)
+    if read_method:
+        engraved_bit = _read_method(c)
+        if engraved_bit != METHOD_LOSSLESS and engraved_bit != METHOD_LOSSY:
+            raise ValueError('Unable to read the engraved bit. Value is {0:02x}'.format(engraved_bit))
+        lossy = engraved_bit == METHOD_LOSSY
     w, h, f = _reconstruct_loss_with_dims(c) if lossy else _reconstruct_lossless_with_dims(c)
     i = Image.fromarray(f, mode='RGB')
     return i
