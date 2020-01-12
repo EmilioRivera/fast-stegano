@@ -174,6 +174,44 @@ def cli():
     pass
 
 @cli.command()
+@click.option('--base', required=True, type=str, help='Image that will hide another image')
+@click.option('--secret', required=True, type=str, help='Image that will be hidden')
+@click.option('--output', required=False, type=str, help='Output image')
+def hide(base, secret, output):
+    if output is None:
+        from pathlib import Path
+        p = Path(secret)
+        bn = p.stem
+        output = '{}_hidden.png'.format(bn)
+        if Path(output).exists():
+            import datetime
+            now = datetime.datetime.now()
+            output = '{}_hidden_{}.png'.format(bn, now.strftime('%Y-%M-%d-%H-%M-%S'))
+    
+    base_image, secret_image = Image.open(base), Image.open(secret)
+    available_hidden_size = base_image.width * base_image.height * 3
+    lossless_data_size = secret_image.width * secret_image.height * 3 * 2 + 9
+    lossy_data_size = secret_image.width * secret_image.height * 3 + 9
+    if lossy_data_size > available_hidden_size:
+        raise ValueError('Base image is not big enough to hide even when using lossy')
+    
+    lossy = lossless_data_size > available_hidden_size
+    print('Method {} due to size'.format('lossy' if lossy else 'lossless'))
+    
+    
+    print('Using n = {} with method {} - filling with noise'.format(4, 'lossy' if lossy else 'lossless'))
+    merged_image = merge_with_dims(base_image, secret_image, lossy=lossy, add_noise=True, engrave_method=True)
+    merged_image.save(output)
+
+@cli.command()
+@click.option('--base', required=True, type=str, help='Image containing secret')
+@click.option('--output', required=False, type=str, help='Output image')
+def reveal(base, output):
+    # TODO: Create output file name is not provided
+    unmerged_image = unmerge_with_dims(Image.open(base), lossy=None, read_method=True)
+    unmerged_image.save(output)
+
+@cli.command()
 @click.option('--img1', required=True, type=str, help='Image that will hide another image')
 @click.option('--img2', required=True, type=str, help='Image that will be hidden')
 @click.option('--output', required=True, type=str, help='Output image')
