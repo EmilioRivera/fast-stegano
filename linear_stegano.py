@@ -36,7 +36,7 @@ def _construct_loss_with_dims(a, b, add_noise=False):
     offset = 9
     assert a.size >= offset + b.size
 
-    hidden_noise = np.zeros(a.size)
+    hidden_noise = np.zeros(a.size, dtype=np.uint8)
     fake = a.copy('C')
     
     
@@ -49,7 +49,7 @@ def _construct_loss_with_dims(a, b, add_noise=False):
     hidden_noise[offset:end] = (b.ravel('C') & 0xF0) >> 4
     
     if add_noise:
-        hidden_noise[end:] = np.random.randint(low=0x00, high=0x0F, size=a.size-end)
+        hidden_noise[end:] = np.random.randint(low=0x00, high=0x0F, size=a.size-end, dtype=np.uint8)
     
     # Discard the LSB from the fake up until the last fake data
     fake[:end] = fake[:end] & 0xF0
@@ -83,7 +83,7 @@ def _construct_lossless_with_dims(a, b, add_noise=False):
     # assert base.width * base.height > secret.width * secret.height * 2
     assert a.size >= offset + b.size * 2
 
-    hidden_noise = np.zeros(a.size)
+    hidden_noise = np.zeros(a.size, dtype=np.uint8)
     fake = a.copy('C')
     
     # Discard the LSB from the fake
@@ -114,7 +114,7 @@ def _construct_lossless_with_dims(a, b, add_noise=False):
     hidden_noise[offset:end] = stacked_arr.ravel('C')
     
     if add_noise:
-        hidden_noise[end:] = np.random.randint(low=0x00, high=0x0F, size=a.size-end)
+        hidden_noise[end:] = np.random.randint(low=0x00, high=0x0F, size=a.size-end, dtype=np.uint8)
 
     fake = fake.ravel('C') + hidden_noise
     return fake.reshape(a.shape)
