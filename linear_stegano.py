@@ -1,5 +1,7 @@
 from PIL import Image
 import numpy as np
+from pathlib import Path
+import datetime
 import click
 
 # TODO: Better method encoding scheme
@@ -168,6 +170,13 @@ def unmerge_with_dims(base, lossy, read_method=False):
     i = Image.fromarray(f, mode='RGB')
     return i
 
+def filename_if_missing(input_file_path, suffix):
+    bn = input_file_path.stem
+    output = '{}_{}.png'.format(bn, suffix)
+    if Path(output).exists():
+        now = datetime.datetime.now()
+        output = '{}_{}_{}.png'.format(bn, suffix, now.strftime('%Y-%M-%d-%H-%M-%S'))
+    return output
 
 @click.group()
 def cli():
@@ -179,14 +188,7 @@ def cli():
 @click.option('--output', required=False, type=str, help='Output image')
 def hide(base, secret, output):
     if output is None:
-        from pathlib import Path
-        p = Path(secret)
-        bn = p.stem
-        output = '{}_hidden.png'.format(bn)
-        if Path(output).exists():
-            import datetime
-            now = datetime.datetime.now()
-            output = '{}_hidden_{}.png'.format(bn, now.strftime('%Y-%M-%d-%H-%M-%S'))
+        output = filename_if_missing(Path(secret), 'hidden')
     
     base_image, secret_image = Image.open(base), Image.open(secret)
     available_hidden_size = base_image.width * base_image.height * 3
@@ -207,7 +209,8 @@ def hide(base, secret, output):
 @click.option('--base', required=True, type=str, help='Image containing secret')
 @click.option('--output', required=False, type=str, help='Output image')
 def reveal(base, output):
-    # TODO: Create output file name is not provided
+    if output is None:
+        output = filename_if_missing(Path(base), 'revealed')
     unmerged_image = unmerge_with_dims(Image.open(base), lossy=None, read_method=True)
     unmerged_image.save(output)
 
