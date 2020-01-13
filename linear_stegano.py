@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 import datetime
 import click
+import math
 
 # TODO: Better method encoding scheme
 METHOD_LOSSLESS = 0x01
@@ -178,6 +179,70 @@ def filename_if_missing(input_file_path, suffix):
         output = '{}_{}_{}.png'.format(bn, suffix, now.strftime('%Y-%M-%d-%H-%M-%S'))
     return output
 
+class EncodingMethod(object):
+    value = None
+    @staticmethod
+    def can_fit(base, secret):
+        pass
+    @staticmethod
+    def available_hidden_size(base):
+        return base.width * base.height * 3
+    @staticmethod
+    def needed_hidden_size(secret):
+        raise NotImplementedError('Not for the base class')
+
+
+class LosslessEncoding(EncodingMethod):
+    value = METHOD_LOSSLESS
+    header_size = 9
+    @staticmethod
+    def can_fit(base, secret):
+        b_w, b_h = base.size
+        s_w, s_h = secret.size
+        available_size = LosslessEncoding.available_hidden_size(base)
+        needed_size = LosslessEncoding.needed_hidden_size(secret)
+        return needed_size <= available_size
+    @staticmethod
+    def needed_hidden_size(secret):
+        return secret.width * secret.height * 3 * 2 + LosslessEncoding.header_size
+
+class LossyEncoding(EncodingMethod):
+    value = METHOD_LOSSY
+    header_size = 9
+    @staticmethod
+    def can_fit(base, secret):
+        b_w, b_h = base.size
+        s_w, s_h = secret.size
+        available_size = LossyEncoding.available_hidden_size(base)
+        needed_size = LossyEncoding.needed_hidden_size(secret)
+        print(available_size, needed_size)
+        return needed_size <= available_size
+    @staticmethod
+    def needed_hidden_size(secret):
+        return secret.width * secret.height * 3 + LossyEncoding.header_size
+
+MODES = [ LosslessEncoding, LossyEncoding ]
+
+def calculate_scale_factor(base, secret, mode: EncodingMethod):
+    needed_space = mode.needed_hidden_size(secret)
+    available_space = mode.available_hidden_size(base)
+    scale = math.sqrt(float(needed_space) / available_space)
+    return scale
+
+
+def calculate_scaled_dimensions(initial_width, initial_height, scale):
+    return int(math.ceil(initial_width * scale)), int(math.ceil(initial_height * scale))
+
+
+def check_supported_modes(base, secret):
+    b_w, b_h = base.size
+    s_w, s_h = secret.size
+    supported_modes = []
+    global MODES
+    # for mode in MODES:
+        # if mode.can_fit(base, secret)
+    return [mode for mode in MODES if mode.can_fit(base, secret)]
+
 @click.group()
 def cli():
     pass
@@ -192,25 +257,23 @@ def hide(base, secret, output, base_resize_lossless):
         output = filename_if_missing(Path(secret), 'hidden')
     
     base_image, secret_image = Image.open(base), Image.open(secret)
-    available_hidden_size = base_image.width * base_image.height * 3
-    lossless_data_size = secret_image.width * secret_image.height * 3 * 2 + 9
-    lossy_data_size = secret_image.width * secret_image.height * 3 + 9
-    lossy = lossless_data_size > available_hidden_size
-
-    if base_resize_lossless and lossy:
-        import math
-        scale = math.sqrt(float(lossless_data_size) / available_hidden_size)
-        assert scale > 1.0
-        scaled_width, scaled_height = int(math.ceil(base_image.width * scale)), int(math.ceil(base_image.height * scale))
-        print('Creating a new resized image of size ( {}, {}) to fit lossless.'.format(scaled_width, scaled_height))
-        base_image = base_image.resize((scaled_width, scaled_height))
+    modes = check_supported_modes(base_image, secret_image)
+    if not base_resize_lossless:
+        if LosslessEncoding in modes:
+            lossy = False
+        elif LossyEncoding in modes:
+            lossy = True
+        else:
+            raise ValueError('Base image is not big enough to hide even when using lossy. No resize option specified')
+    else:
+        if LosslessEncoding not in modes:
+            required_scale = calculate_scale_factor(base_image, secret_image, LosslessEncoding)
+            nw, nh = calculate_scaled_dimensions(base_image.width, base_image.height, required_scale)
+            assert required_scale > 1.0
+            print('Creating a new resized image of size ({}, {}) to fit lossless (scale of {}).'.format(nw, nh, required_scale))
+            base_image = base_image.resize((nw, nh))
         lossy = False
-    elif lossy_data_size > available_hidden_size:
-        raise ValueError('Base image is not big enough to hide even when using lossy')
-    
-    print('Method {} due to size'.format('lossy' if lossy else 'lossless'))
-    
-    
+
     print('Using n = {} with method {} - filling with noise'.format(4, 'lossy' if lossy else 'lossless'))
     merged_image = merge_with_dims(base_image, secret_image, lossy=lossy, add_noise=True, engrave_method=True)
     merged_image.save(output)
