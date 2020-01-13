@@ -41,7 +41,10 @@ def calculate_scale_factor(base, secret, mode: EncodingMethod):
 
 
 def calculate_scaled_dimensions(initial_width, initial_height, scale):
-    return int(math.ceil(initial_width * scale)), int(math.ceil(initial_height * scale))
+    if scale > 1.0:
+        return int(math.ceil(initial_width * scale)), int(math.ceil(initial_height * scale))
+    else:
+        return int(math.floor(initial_width * scale)), int(math.floor(initial_height * scale))
 
 
 def check_supported_modes(base, secret):
@@ -58,9 +61,10 @@ def cli():
 @click.option('--base', required=True, type=str, help='Image that will hide another image')
 @click.option('--secret', required=True, type=str, help='Image that will be hidden')
 @click.option('--output', required=False, type=str, help='Output image')
-@click.option('--base-resize-lossless', is_flag=True, type=bool, help='Resize the input image so that lossless secret can be hidden')
+@click.option('--base-resize-lossless', is_flag=True, type=bool, help='Resize the input image (bigger) so that lossless secret can be hidden. No resize is done if the data would already fit.')
+@click.option('--secret-resize-lossless', is_flag=True, type=bool, help='Resize the input image (smaller) so that lossless secret can be hidden. No resize is done if the data would already fit.')
 @click.option('--force-jpeg', is_flag=True, type=bool, help='Save the jpeg of the secret to save space')
-def hide(base, secret, output, base_resize_lossless, force_jpeg):
+def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_lossless):
     if output is None:
         output = filename_if_missing(Path(secret), 'hidden')
     
@@ -69,21 +73,30 @@ def hide(base, secret, output, base_resize_lossless, force_jpeg):
     mode = None
     if force_jpeg:
         mode = JpegEncodingMethod
-    elif not base_resize_lossless:
+    # We should resize if needed
+    elif base_resize_lossless or secret_resize_lossless:
+        # Check if we need to even resize one of the images
+        if LosslessEncoding not in modes:
+            required_scale = calculate_scale_factor(base_image, secret_image, LosslessEncoding)
+            assert required_scale > 1.0
+            if base_resize_lossless:
+                # Rather resize the base image than to downside the secret
+                nw, nh = calculate_scaled_dimensions(base_image.width, base_image.height, required_scale)
+                print('Creating a new resized base image of size ({0:d}, {0:d}) to fit lossless (scale of {0:.2f}).'.format(nw, nh, required_scale))
+                base_image = base_image.resize((nw, nh))
+            else:
+                nw, nh = calculate_scaled_dimensions(base_image.width, base_image.height, 1.0 / required_scale)
+                print('Creating a new resized secret image of size ({0:d}, {0:d}) to fit lossless (scale of {0:.2f}).'.format(nw, nh, 1.0 / required_scale))
+                secret_image = secret_image.resize((nw, nh))
+
+        mode = LosslessEncoding
+    else:
         if LosslessEncoding in modes:
             mode = LosslessEncoding
         elif LossyEncoding in modes:
             mode = LossyEncoding
         else:
             raise ValueError('Base image is not big enough to hide even when using lossy. No resize option specified')
-    else:
-        if LosslessEncoding not in modes:
-            required_scale = calculate_scale_factor(base_image, secret_image, LosslessEncoding)
-            nw, nh = calculate_scaled_dimensions(base_image.width, base_image.height, required_scale)
-            assert required_scale > 1.0
-            print('Creating a new resized image of size ({}, {}) to fit lossless (scale of {}).'.format(nw, nh, required_scale))
-            base_image = base_image.resize((nw, nh))
-        mode = LosslessEncoding
 
     print('Using n = {} with method {} - filling with noise'.format(4, mode))
     merged_image = mode.hide(base_image, secret_image, add_noise=True, engrave_method=True)
