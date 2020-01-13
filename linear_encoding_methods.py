@@ -1,7 +1,8 @@
 from PIL import Image
 import numpy as np
+import io
 
-from linear_utils import np8_to_number_16, len_to_np8_16
+from linear_utils import np8_to_number_16, len_to_np8_16, np8_to_number_32, len_to_np8_32
 
 # TODO: Better method encoding scheme
 METHOD_LOSSLESS = 0x01
@@ -192,7 +193,76 @@ class LossyEncoding(EncodingMethod):
         i = Image.fromarray(f, mode='RGB')
         return i
 
-MODES = [ LosslessEncoding, LossyEncoding ]
+class JpegEncodingMethod(EncodingMethod):
+    value = 0x03
+    header_size = 9
+    @staticmethod
+    def can_fit(base, secret):
+        b_w, b_h = base.size
+        available_size = LosslessEncoding.available_hidden_size(base)
+        needed_size = LosslessEncoding.needed_hidden_size(secret)
+        return needed_size <= available_size
+    @staticmethod
+    def needed_hidden_size(secret):
+        b = io.BytesIO()
+        secret.save(ba, format='jpeg')
+        memview = ba.getbuffer()
+        return len(memview)
+    @staticmethod
+    def hide(base, secret, add_noise, engrave_method):
+        ba = io.BytesIO()
+        secret.save(ba, format='jpeg')
+        memview = ba.getbuffer()
+        z = np.frombuffer(memview, dtype=np.uint8)
+        
+        a = np.asarray(base)
+        b = np.asarray(secret)
+        # 32 bits are needed to encode the length
+        # Using n = 4 for the LSB, we need 8 entries to encode the length of the message.
+        # We will occupy 9 entries, the last one being unused. Just to get a total of 3 pixels
+        offset = JpegEncodingMethod.header_size
+        tot_size = len(memview)
+        hidden_noise = np.zeros(a.size, dtype=np.uint8)
+        fake = a.copy('C')
+        print(len(memview), len(z), tot_size, tot_size * 2)
+        
+        
+        # The 8 first value will be the length of the message, the additional 9th value is not used
+        # width_np, height_np = len_to_np8_16(b.shape[0]), len_to_np8_16(b.shape[1])
+        hidden_noise[:8] = len_to_np8_32(tot_size * 2)
+        # Put the hidden image data in target
+        start, end = offset, offset + tot_size * 2
+        hidden_noise[offset:end:2] = (z & 0xF0) >> 4
+        hidden_noise[offset+1:end+1:2] = z & 0x0F
+
+        if add_noise:
+            hidden_noise[end:] = np.random.randint(low=0x00, high=0x0F, size=a.size-end, dtype=np.uint8)
+        
+        # Discard the LSB from the fake up until the last fake data
+        fake[:end] = fake[:end] & 0xF0
+        fake = fake.ravel('C') + hidden_noise
+        if engrave_method:
+            fake[8] = JpegEncodingMethod.value
+        fake_image = Image.fromarray(fake.reshape(a.shape))
+
+        return fake_image
+    @staticmethod
+    def reveal(base):
+        c = np.asarray(base)
+        flat = c.ravel('C') & 0x0F
+        to_read = np8_to_number_32(flat[:8])
+
+        start, end = JpegEncodingMethod.header_size, JpegEncodingMethod.header_size + to_read
+        _msb = flat[start:end:2] << 4
+        _lsb = np.zeros_like(_msb, dtype=np.uint8)
+        _lsb[:end-start] = flat[start+1:end+1:2]
+        _f = _msb + _lsb
+        v = io.BytesIO(_f.tobytes())
+        image = Image.open(v)
+        return image
+        raise NotImplementedError('Not for the base class')
+
+MODES = [ LosslessEncoding, LossyEncoding, JpegEncodingMethod ]
 
 def compute_method_used(image):
     _arr = np.asarray(image, dtype=np.uint8)

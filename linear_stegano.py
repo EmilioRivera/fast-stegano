@@ -4,7 +4,7 @@ from pathlib import Path
 import datetime
 import click
 import math
-from linear_encoding_methods import MODES, LossyEncoding, LosslessEncoding, EncodingMethod, METHOD_LOSSLESS, METHOD_LOSSY, compute_method_used
+from linear_encoding_methods import MODES, LossyEncoding, LosslessEncoding, EncodingMethod, METHOD_LOSSLESS, METHOD_LOSSY, compute_method_used, JpegEncodingMethod
 from linear_utils import len_to_np8_16, np8_to_number_16
 
 def merge_with_dims(base, secret, lossy, add_noise, engrave_method=False):
@@ -59,14 +59,17 @@ def cli():
 @click.option('--secret', required=True, type=str, help='Image that will be hidden')
 @click.option('--output', required=False, type=str, help='Output image')
 @click.option('--base-resize-lossless', is_flag=True, type=bool, help='Resize the input image so that lossless secret can be hidden')
-def hide(base, secret, output, base_resize_lossless):
+@click.option('--force-jpeg', is_flag=True, type=bool, help='Save the jpeg of the secret to save space')
+def hide(base, secret, output, base_resize_lossless, force_jpeg):
     if output is None:
         output = filename_if_missing(Path(secret), 'hidden')
     
     base_image, secret_image = Image.open(base), Image.open(secret)
     modes = check_supported_modes(base_image, secret_image)
     mode = None
-    if not base_resize_lossless:
+    if force_jpeg:
+        mode = JpegEncodingMethod
+    elif not base_resize_lossless:
         if LosslessEncoding in modes:
             mode = LosslessEncoding
         elif LossyEncoding in modes:
@@ -96,7 +99,14 @@ def reveal(base, output):
     method = compute_method_used(base_image)
     if method is not None:
         unmerged_image = method.reveal(base_image)
-    unmerged_image.save(output)
+    kwargs = dict()
+    if method == JpegEncodingMethod:
+        kwargs['quality'] = 100
+        kwargs['optimize'] = True
+        if output.endswith('.png'):
+            output = '{}.jpg'.format(output[:-4])
+            print('Original image was jpeg encoded, saving as {}'.format(output))
+    unmerged_image.save(output, **kwargs)
 
 @cli.command()
 @click.option('--img1', required=True, type=str, help='Image that will hide another image')
