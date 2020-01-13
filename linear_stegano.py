@@ -186,7 +186,8 @@ def cli():
 @click.option('--base', required=True, type=str, help='Image that will hide another image')
 @click.option('--secret', required=True, type=str, help='Image that will be hidden')
 @click.option('--output', required=False, type=str, help='Output image')
-def hide(base, secret, output):
+@click.option('--base-resize-lossless', is_flag=True, type=bool, help='Resize the input image so that lossless secret can be hidden')
+def hide(base, secret, output, base_resize_lossless):
     if output is None:
         output = filename_if_missing(Path(secret), 'hidden')
     
@@ -194,10 +195,19 @@ def hide(base, secret, output):
     available_hidden_size = base_image.width * base_image.height * 3
     lossless_data_size = secret_image.width * secret_image.height * 3 * 2 + 9
     lossy_data_size = secret_image.width * secret_image.height * 3 + 9
-    if lossy_data_size > available_hidden_size:
+    lossy = lossless_data_size > available_hidden_size
+
+    if base_resize_lossless and lossy:
+        import math
+        scale = math.sqrt(float(lossless_data_size) / available_hidden_size)
+        assert scale > 1.0
+        scaled_width, scaled_height = int(math.ceil(base_image.width * scale)), int(math.ceil(base_image.height * scale))
+        print('Creating a new resized image of size ( {}, {}) to fit lossless.'.format(scaled_width, scaled_height))
+        base_image = base_image.resize((scaled_width, scaled_height))
+        lossy = False
+    elif lossy_data_size > available_hidden_size:
         raise ValueError('Base image is not big enough to hide even when using lossy')
     
-    lossy = lossless_data_size > available_hidden_size
     print('Method {} due to size'.format('lossy' if lossy else 'lossless'))
     
     
