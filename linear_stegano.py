@@ -61,14 +61,27 @@ def cli():
 @click.option('--base', required=True, type=str, help='Image that will hide another image')
 @click.option('--secret', required=True, type=str, help='Image that will be hidden')
 @click.option('--output', required=False, type=str, help='Output image')
+@click.option('--base-resize', required=False, type=float, default=1.0, help='Resize to apply to input image regardless of options specified.')
+@click.option('--secret-resize', required=False, type=float, default=1.0, help='Resize to apply to input image regardless of options specified.')
 @click.option('--base-resize-lossless', is_flag=True, type=bool, help='Resize the input image (bigger) so that lossless secret can be hidden. No resize is done if the data would already fit.')
 @click.option('--secret-resize-lossless', is_flag=True, type=bool, help='Resize the input image (smaller) so that lossless secret can be hidden. No resize is done if the data would already fit.')
 @click.option('--force-jpeg', is_flag=True, type=bool, help='Save the jpeg of the secret to save space')
-def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_lossless):
+def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_lossless, base_resize, secret_resize):
     if output is None:
         output = filename_if_missing(Path(secret), 'hidden')
     
     base_image, secret_image = Image.open(base), Image.open(secret)
+    if base_resize != 1.0:
+        assert base_resize > 0
+        b_w, b_h = calculate_scaled_dimensions(base_image.width, base_image.height, base_resize)
+        print('Rescaling base image to size ({}, {}). Scale of {}'.format(b_w, b_h, base_resize))
+        base_image = base_image.resize((b_w, b_h))
+    if secret_resize != 1.0:
+        assert secret_resize > 0
+        s_w, s_h = calculate_scaled_dimensions(secret_image.width, secret_image.height, secret_resize)
+        print('Rescaling secret image to size ({}, {}). Scale of {}'.format(s_w, s_h, secret_resize))
+        secret_image = secret_image.resize((s_w, s_h))
+
     modes = check_supported_modes(base_image, secret_image)
     mode = None
     if force_jpeg:
