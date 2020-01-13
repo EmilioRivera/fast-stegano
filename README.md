@@ -1,8 +1,8 @@
 # Steganography
 
-Quick repo doing steganography, inspired from this repository: https://github.com/kelvins/steganography, but using bitwise operations with Pillow-SIMD.
+Quick repo doing steganography, originally inspired from this repository: https://github.com/kelvins/steganography, but using bitwise operations with Pillow-SIMD.
 
-Also, module `linear_stegano.py` is based on `numpy` arrays which is still substianlly faster.
+As a more general solution, module `linear_stegano.py` is based on `numpy` arrays which is still substianlly faster.
 # Installation
 You need Python 3.x for this project. I suggest using [pyenv](https://github.com/pyenv/pyenv).
 Then you can create a virtual environment with
@@ -49,4 +49,4 @@ Consider you want to:
 
 `python linear_stegano.py reveal --base secret_hidden.png [--output name_of_output.png]`
 
-The same considerations for `--output` apply for the retrieval (except that instead of `hidden` the suffix is `revealed`). See [this section](###Notes).
+The same considerations for `--output` apply for the retrieval (except that instead of `hidden` the suffix is `revealed`). See [this section](#Notes).
