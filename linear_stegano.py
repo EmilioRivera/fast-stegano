@@ -5,26 +5,7 @@ import datetime
 import click
 import math
 from linear_encoding_methods import MODES, LossyEncoding, LosslessEncoding, EncodingMethod, METHOD_LOSSLESS, METHOD_LOSSY
-
-# Utilities
-def len_to_np8_16(number):
-    # Returns a numpy array of np8 corresponding to the representation of `number`
-    # The MSBs are at the front of the returned array
-    assert number <= 0xFFFF
-    r = np.ndarray((4, ), dtype=np.uint8)
-    for i, o in enumerate(range(0, 16, 4)):
-        m = (number & (0xF000 >> o)) >> (12-o)
-#         print(i, o, m, '{0:032b}'.format(0xF000 >> o), '{0:032b}'.format(m), sep='\t')
-        r[i] = m
-    return r
-
-def np8_to_number_16(np8_len_arr):
-    total = 0
-    for i,v in enumerate(np8_len_arr):
-#         print(v)
-        total += int(v) << (12- 4*i)
-#     print(total)
-    return total
+from linear_utils import len_to_np8_16, np8_to_number_16
 
 #
 # Lossy linear steganography
@@ -211,11 +192,12 @@ def hide(base, secret, output, base_resize_lossless):
     
     base_image, secret_image = Image.open(base), Image.open(secret)
     modes = check_supported_modes(base_image, secret_image)
+    mode = None
     if not base_resize_lossless:
         if LosslessEncoding in modes:
-            lossy = False
+            mode = LosslessEncoding
         elif LossyEncoding in modes:
-            lossy = True
+            mode = LossyEncoding
         else:
             raise ValueError('Base image is not big enough to hide even when using lossy. No resize option specified')
     else:
@@ -225,10 +207,10 @@ def hide(base, secret, output, base_resize_lossless):
             assert required_scale > 1.0
             print('Creating a new resized image of size ({}, {}) to fit lossless (scale of {}).'.format(nw, nh, required_scale))
             base_image = base_image.resize((nw, nh))
-        lossy = False
+        mode = LosslessEncoding
 
-    print('Using n = {} with method {} - filling with noise'.format(4, 'lossy' if lossy else 'lossless'))
-    merged_image = merge_with_dims(base_image, secret_image, lossy=lossy, add_noise=True, engrave_method=True)
+    print('Using n = {} with method {} - filling with noise'.format(4, mode))
+    merged_image = mode.hide(base_image, secret_image, add_noise=True, engrave_method=True)
     merged_image.save(output)
 
 @cli.command()
@@ -237,7 +219,14 @@ def hide(base, secret, output, base_resize_lossless):
 def reveal(base, output):
     if output is None:
         output = filename_if_missing(Path(base), 'revealed')
-    unmerged_image = unmerge_with_dims(Image.open(base), lossy=None, read_method=True)
+    # TODO: Create a function in linear encoding methods to resolve this
+    base_image = Image.open(base)
+    _arr = np.asarray(base_image, dtype=np.uint8)
+    method_value = _read_method(_arr)
+    del _arr
+    method = next((m for m in MODES if m.value == method_value), None)
+    if method is not None:
+        unmerged_image = method.reveal(base_image)
     unmerged_image.save(output)
 
 @cli.command()
