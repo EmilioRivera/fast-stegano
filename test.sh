@@ -3,6 +3,16 @@ MSB_VALUES=( 0 1 2 3 4 5 6 7 8 )
 INPUT_FILE="${INPUT_FILE:-input.jpg}"
 CONCEAL_FILE="${CONCEAL_FILE:-toconceal.jpg}"
 
+if [ ! -f "$INPUT_FILE" ]; then
+    echo "Input file $INPUT_FILE does not exist!"
+    exit 1
+fi
+
+if [ ! -f "$CONCEAL_FILE" ]; then
+    echo "Input file $CONCEAL_FILE does not exist!"
+    exit 1
+fi
+
 mkdir -p 'test'
 
 # TODO: Put correct venv path or comment if not needed
