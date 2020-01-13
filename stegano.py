@@ -13,7 +13,7 @@ MASKS = {
     8: 0b11111111,
 }
 
-def lsb_components(img, n):
+def msb_components(img, n):
     r, g, b = img.split()
     o_r = ImageMath.eval('a & m', a=r, m=MASKS[8-n])
     o_g = ImageMath.eval('a & m', a=g, m=MASKS[8-n])
@@ -34,7 +34,7 @@ def _naive_merge(img1, img2, n=4):
 # Img1 has its `n` LSBs put to 0 first. This incurs overhead.
 def _full_merge(img1, img2, n=4):
     # We need to remove the LSB for each pixels
-    cp_r, cp_g, cp_b = lsb_components(img1, n)
+    cp_r, cp_g, cp_b = msb_components(img1, n)
     r2, g2, b2 = img2.split()
     o_r = ImageMath.eval("a + (b >> n) ", a=cp_r, b=r2, n=8-n).convert('L')
     o_g = ImageMath.eval("a + (b >> n) ", a=cp_g, b=g2, n=8-n).convert('L')
