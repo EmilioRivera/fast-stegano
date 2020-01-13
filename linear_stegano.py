@@ -48,9 +48,6 @@ def check_supported_modes(base, secret):
     b_w, b_h = base.size
     s_w, s_h = secret.size
     supported_modes = []
-    global MODES
-    # for mode in MODES:
-        # if mode.can_fit(base, secret)
     return [mode for mode in MODES if mode.can_fit(base, secret)]
 
 @click.group()
