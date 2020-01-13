@@ -4,7 +4,7 @@ from pathlib import Path
 import datetime
 import click
 import math
-from linear_encoding_methods import MODES, LossyEncoding, LosslessEncoding, EncodingMethod, METHOD_LOSSLESS, METHOD_LOSSY
+from linear_encoding_methods import MODES, LossyEncoding, LosslessEncoding, EncodingMethod, METHOD_LOSSLESS, METHOD_LOSSY, compute_method_used
 from linear_utils import len_to_np8_16, np8_to_number_16
 
 #
@@ -219,12 +219,8 @@ def hide(base, secret, output, base_resize_lossless):
 def reveal(base, output):
     if output is None:
         output = filename_if_missing(Path(base), 'revealed')
-    # TODO: Create a function in linear encoding methods to resolve this
     base_image = Image.open(base)
-    _arr = np.asarray(base_image, dtype=np.uint8)
-    method_value = _read_method(_arr)
-    del _arr
-    method = next((m for m in MODES if m.value == method_value), None)
+    method = compute_method_used(base_image)
     if method is not None:
         unmerged_image = method.reveal(base_image)
     unmerged_image.save(output)

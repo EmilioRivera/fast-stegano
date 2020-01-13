@@ -193,3 +193,10 @@ class LossyEncoding(EncodingMethod):
         return i
 
 MODES = [ LosslessEncoding, LossyEncoding ]
+
+def compute_method_used(image):
+    _arr = np.asarray(image, dtype=np.uint8)
+    method_value = _arr.ravel('C')[8] & 0x0F
+    del _arr
+    method = next((m for m in MODES if m.value == method_value), None)
+    return method
