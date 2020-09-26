@@ -57,7 +57,10 @@ def cli():
 @click.option('--secret-resize-lossless', is_flag=True, type=bool, help='Resize the input image (smaller) so that lossless secret can be hidden. No resize is done if the data would already fit.')
 @click.option('--force-jpeg', is_flag=True, type=bool, help='Save the jpeg of the secret to save space')
 @click.option('--fill-with-noise/--no-noise', default=False, help='If the leftover space should contain noise')
-def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_lossless, base_resize, secret_resize, fill_with_noise):
+@click.pass_context
+def hide(ctx, base, secret, output, base_resize_lossless, force_jpeg, secret_resize_lossless, base_resize, secret_resize, fill_with_noise):
+    for param in ctx.params.items():
+        logging.info('Using parameter {}: {}'.format(*param))
     if output is None:
         output = filename_if_missing(Path(secret), 'hidden')
     
@@ -116,7 +119,10 @@ def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_l
 @cli.command()
 @click.option('--base', required=True, type=str, help='Image containing secret')
 @click.option('--output', required=False, type=str, help='Output image')
-def reveal(base, output):
+@click.pass_context
+def reveal(ctx, base, output):
+    for param in ctx.params.items():
+        logging.info('Using parameter {}: {}'.format(*param))
     if output is None:
         output = filename_if_missing(Path(base), 'revealed')
     base_image = Image.open(base)
