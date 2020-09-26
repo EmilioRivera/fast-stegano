@@ -1,7 +1,7 @@
 from PIL import Image
 import numpy as np
 import io
-
+import abc
 from linear_utils import np8_to_number_16, len_to_np8_16, np8_to_number_32, len_to_np8_32
 
 # TODO: Better method encoding scheme
@@ -14,49 +14,61 @@ logging.basicConfig(
     format='%(asctime)s.%(msecs)03d %(funcName)18s: %(message)s',
 )
 
-class EncodingMethod(object):
+class BaseEncoder(abc.ABC):
     value = None
-    @staticmethod
-    def can_fit(base, secret):
-        pass
+    header_size = -1
+
+    @classmethod
+    def can_fit(cls, base, secret):
+        available_size = cls.available_hidden_size(base)
+        needed_size = cls.needed_hidden_size(secret)
+        logging.info(f'Needed size is {needed_size} and avaiable is {available_size}')
+        logging.info(f'Can fit? {needed_size <= available_size}')
+        logging.info(f'File dimensions are:')
+        logging.info(f'Base image: {base.size}')
+        logging.info(f'Secret image: {secret.size}')
+        return needed_size <= available_size
+
     @staticmethod
     def available_hidden_size(base):
+        logging.info('Using base class hidden size information')
+        # All pixels can be used
         return base.width * base.height * 3
+
     @staticmethod
+    @abc.abstractmethod
     def needed_hidden_size(secret):
         raise NotImplementedError('Not for the base class')
-    @staticmethod
-    def hide(base, secret, add_noise, engrave_method):
+
+    @abc.abstractmethod
+    def hide(self, base, secret, add_noise, engrave_method):
         raise NotImplementedError('Not for the base class')
-    @staticmethod
-    def reveal(base):
+
+    @abc.abstractmethod
+    def reveal(self, base):
         raise NotImplementedError('Not for the base class')
 
 
-class LosslessEncoding(EncodingMethod):
+class LosslessEncoder(BaseEncoder):
     value = METHOD_LOSSLESS
     header_size = 9
-    @staticmethod
-    def can_fit(base, secret):
-        b_w, b_h = base.size
-        s_w, s_h = secret.size
-        available_size = LosslessEncoding.available_hidden_size(base)
-        needed_size = LosslessEncoding.needed_hidden_size(secret)
-        return needed_size <= available_size
+
+    def __init__(self):
+        super().__init__()
+
     @staticmethod
     def needed_hidden_size(secret):
-        return secret.width * secret.height * 3 * 2 + LosslessEncoding.header_size
+        return secret.width * secret.height * 3 * 2 + LosslessEncoder.header_size
     
-    @staticmethod
-    def _construct_lossless_with_dims(a, b, add_noise=False):
+    def _construct_lossless_with_dims(self, a, b, add_noise=False):
         # 32 bits are needed to encode the length
         # Using n = 4 for the LSB, we need 8 entries to encode the length of the message.
         # We will occupy 9 entries, the last one being unused. Just to get a total of 3 pixels
-        LosslessEncoding.header_size = 9
+        LosslessEncoder.header_size = 9
         # We need to encode each pixel into the 4 LSB, resulting in twice the size
         # assert base.width * base.height > secret.width * secret.height * 2
         # TODO: Remove and change for own can_fit method
-        assert a.size >= LosslessEncoding.header_size + b.size * 2
+        assert a.size >= LosslessEncoder.header_size + b.size * 2
 
         hidden_noise = np.zeros(a.size, dtype=np.uint8)
         fake = a.copy('C')
@@ -83,7 +95,7 @@ class LosslessEncoding(EncodingMethod):
         
         
         # Put the hidden image data in target
-        offset = LosslessEncoding.header_size
+        offset = LosslessEncoder.header_size
         start, end = offset, offset + b.size * 2
         # When raveled, they will be consecutive, i.e all red data, then all green data, then all blue data
         stacked_arr = np.stack([red_noise, green_noise, blue_noise])
@@ -95,8 +107,7 @@ class LosslessEncoding(EncodingMethod):
         fake = fake.ravel('C') + hidden_noise
         return fake.reshape(a.shape)
     
-    @staticmethod
-    def _reconstruct_lossless_with_dims(a):
+    def _reconstruct_lossless_with_dims(self, a):
         # Get the dimensions
         flat = (a.ravel('C') & 0x0F)
         width, height = np8_to_number_16(flat[:4]), np8_to_number_16(flat[4:8])
@@ -112,43 +123,37 @@ class LosslessEncoding(EncodingMethod):
         output[:,:,1] = (((rg[0::2]) << 4) + (rg[1::2])).reshape(width, height)
         output[:,:,2] = (((rb[0::2]) << 4) + (rb[1::2])).reshape(width, height)
         return width, height, output.reshape(width, height, 3)
-    @staticmethod
-    def hide(base, secret, add_noise, engrave_method):
-        assert LosslessEncoding.can_fit(base, secret)
+
+    def hide(self, base, secret, add_noise, engrave_method):
+        assert LosslessEncoder.can_fit(base, secret)
         a = np.asarray(base)
         b = np.asarray(secret)
-        fake_data = LosslessEncoding._construct_lossless_with_dims(a, b, add_noise)
+        fake_data = self._construct_lossless_with_dims(a, b, add_noise)
         if engrave_method:
-            fake_data.ravel('C')[8] = LosslessEncoding.value
+            fake_data.ravel('C')[8] = LosslessEncoder.value
         return Image.fromarray(fake_data)
-    @staticmethod
-    def reveal(base):
+
+    def reveal(self, base):
         c = np.asarray(base)
-        w, h, f = LosslessEncoding._reconstruct_lossless_with_dims(c)
+        w, h, f = self._reconstruct_lossless_with_dims(c)
         i = Image.fromarray(f, mode='RGB')
         return i
 
-class LossyEncoding(EncodingMethod):
+class LossyEncoder(BaseEncoder):
     value = METHOD_LOSSY
     header_size = 9
-    @staticmethod
-    def can_fit(base, secret):
-        b_w, b_h = base.size
-        s_w, s_h = secret.size
-        available_size = LossyEncoding.available_hidden_size(base)
-        needed_size = LossyEncoding.needed_hidden_size(secret)
-        print(available_size, needed_size)
-        return needed_size <= available_size
-    @staticmethod
-    def needed_hidden_size(secret):
-        return secret.width * secret.height * 3 + LossyEncoding.header_size
 
-    @staticmethod
-    def _construct_loss_with_dims(a, b, add_noise):
+    def __init__(self):
+        super().__init__()
+
+    def needed_hidden_size(secret):
+        return secret.width * secret.height * 3 + LossyEncoder.header_size
+
+    def _construct_loss_with_dims(self, a, b, add_noise):
         # 32 bits are needed to encode the length
         # Using n = 4 for the LSB, we need 8 entries to encode the length of the message.
         # We will occupy 9 entries, the last one being unused. Just to get a total of 3 pixels
-        offset = LossyEncoding.header_size
+        offset = LossyEncoder.header_size
 
         hidden_noise = np.zeros(a.size, dtype=np.uint8)
         fake = a.copy('C')
@@ -170,8 +175,7 @@ class LossyEncoding(EncodingMethod):
         fake = fake.ravel('C') + hidden_noise
         return fake.reshape(a.shape)
 
-    @staticmethod
-    def _reconstruct_loss_with_dims(a):
+    def _reconstruct_loss_with_dims(self, a):
         # Get the dimensions
         flat = (a.ravel() & 0x0F)
         width, height = np8_to_number_16(flat[:4]), np8_to_number_16(flat[4:8])
@@ -181,40 +185,35 @@ class LossyEncoding(EncodingMethod):
         packed = np.stack([rr, rg, rb], axis=-1)
         return width, height, packed.reshape(width, height, 3)
     
-    @staticmethod
-    def hide(base, secret, add_noise, engrave_method):
-        assert LossyEncoding.can_fit(base, secret)
+    def hide(self, base, secret, add_noise, engrave_method):
+        assert LossyEncoder.can_fit(base, secret)
         a = np.asarray(base)
         b = np.asarray(secret)
-        fake_data = LossyEncoding._construct_loss_with_dims(a, b, add_noise)
+        fake_data = self._construct_loss_with_dims(a, b, add_noise)
         if engrave_method:
-            fake_data.ravel('C')[8] = LossyEncoding.value
+            fake_data.ravel('C')[8] = LossyEncoder.value
         return Image.fromarray(fake_data)
     
-    @staticmethod
-    def reveal(base):
+    def reveal(self, base):
         c = np.asarray(base)
-        w, h, f = LossyEncoding._reconstruct_loss_with_dims(c)
+        w, h, f = self._reconstruct_loss_with_dims(c)
         i = Image.fromarray(f, mode='RGB')
         return i
 
-class JpegEncodingMethod(EncodingMethod):
+class JpegEncoder(BaseEncoder):
     value = 0x03
     header_size = 9
-    @staticmethod
-    def can_fit(base, secret):
-        b_w, b_h = base.size
-        available_size = LosslessEncoding.available_hidden_size(base)
-        needed_size = LosslessEncoding.needed_hidden_size(secret)
-        return needed_size <= available_size
-    @staticmethod
+
+    def __init__(self):
+        super().__init__()
+
     def needed_hidden_size(secret):
         b = io.BytesIO()
+        ba = io.BytesIO()
         secret.save(ba, format='jpeg')
         memview = ba.getbuffer()
         return len(memview)
-    @staticmethod
-    def hide(base, secret, add_noise, engrave_method):
+    def hide(self, base, secret, add_noise, engrave_method):
         ba = io.BytesIO()
         secret.save(ba, format='jpeg')
         memview = ba.getbuffer()
@@ -225,7 +224,7 @@ class JpegEncodingMethod(EncodingMethod):
         # 32 bits are needed to encode the length
         # Using n = 4 for the LSB, we need 8 entries to encode the length of the message.
         # We will occupy 9 entries, the last one being unused. Just to get a total of 3 pixels
-        offset = JpegEncodingMethod.header_size
+        offset = self.header_size
         tot_size = len(memview)
         hidden_noise = np.zeros(a.size, dtype=np.uint8)
         fake = a.copy('C')
@@ -247,17 +246,16 @@ class JpegEncodingMethod(EncodingMethod):
         fake[:end] = fake[:end] & 0xF0
         fake = fake.ravel('C') + hidden_noise
         if engrave_method:
-            fake[8] = JpegEncodingMethod.value
+            fake[8] = self.value
         fake_image = Image.fromarray(fake.reshape(a.shape))
 
         return fake_image
-    @staticmethod
-    def reveal(base):
+    def reveal(self, base):
         c = np.asarray(base)
         flat = c.ravel('C') & 0x0F
         to_read = np8_to_number_32(flat[:8])
 
-        start, end = JpegEncodingMethod.header_size, JpegEncodingMethod.header_size + to_read
+        start, end = self.header_size, self.header_size + to_read
         _msb = flat[start:end:2] << 4
         _lsb = np.zeros_like(_msb, dtype=np.uint8)
         _lsb[:end-start] = flat[start+1:end+1:2]
@@ -267,7 +265,7 @@ class JpegEncodingMethod(EncodingMethod):
         return image
         raise NotImplementedError('Not for the base class')
 
-MODES = [ LosslessEncoding, LossyEncoding, JpegEncodingMethod ]
+MODES = [ LosslessEncoder, LossyEncoder, JpegEncoder ]
 
 def compute_method_used(image):
     _arr = np.asarray(image, dtype=np.uint8)

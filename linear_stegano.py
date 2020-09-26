@@ -4,23 +4,42 @@ from pathlib import Path
 import datetime
 import click
 import math
-from linear_encoding_methods import MODES, LossyEncoding, LosslessEncoding, EncodingMethod, METHOD_LOSSLESS, METHOD_LOSSY, compute_method_used, JpegEncodingMethod
+import logging
+from linear_encoding_methods import MODES, LossyEncoder, LosslessEncoder, BaseEncoder, METHOD_LOSSLESS, METHOD_LOSSY, compute_method_used, JpegEncoder
 from linear_utils import len_to_np8_16, np8_to_number_16
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s.%(msecs)03d %(funcName)18s: %(message)s',
+)
+
 def merge_with_dims(base, secret, lossy, add_noise, engrave_method=False):
-    mode = LossyEncoding if lossy else LosslessEncoding
-    fake = LosslessEncoding.hide(base, secret, add_noise, engrave_method)
+    mode = LossyEncoder if lossy else LosslessEncoder
+    encoder = mode()
+    logging.info('Parameter {}: {}'.format('base', base))
+    logging.info('Parameter {}: {}'.format('secret', secret))
+    logging.info('Parameter {}: {}'.format('lossy', lossy))
+    logging.info('Parameter {}: {}'.format('lossy', lossy))
+    logging.info('Parameter {}: {}'.format('add_noise', add_noise))
+    logging.info('Parameter {}: {}'.format('engrave_method', engrave_method))
+    logging.info(f'Using encoder {encoder}')
+    fake = encoder.hide(base, secret, add_noise, engrave_method)
     return fake
 
 
 def unmerge_with_dims(base, lossy, read_method=False):
+    logging.info('Parameter {}: {}'.format('base', base))
+    logging.info('Parameter {}: {}'.format('lossy', lossy))
+    logging.info('Parameter {}: {}'.format('read_method', read_method))
     if read_method:
         method = compute_method_used(base)
         assert method is not None
         lossy = engraved_bit == METHOD_LOSSY
     else:
-        method = LossyEncoding if lossy else LosslessEncoding
-    revealed = method.reveal(base)
+        method = LossyEncoder if lossy else LosslessEncoder
+    encoder = method()
+    logging.info(f'Using decoder {encoder}')
+    revealed = encoder.reveal(base)
     return revealed
 
 
@@ -33,7 +52,7 @@ def filename_if_missing(input_file_path, suffix):
     return output
 
 
-def calculate_scale_factor(base, secret, mode: EncodingMethod):
+def calculate_scale_factor(base, secret, mode: BaseEncoder):
     needed_space = mode.needed_hidden_size(secret)
     available_space = mode.available_hidden_size(base)
     scale = math.sqrt(float(needed_space) / available_space)
@@ -74,45 +93,46 @@ def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_l
     if base_resize != 1.0:
         assert base_resize > 0
         b_w, b_h = calculate_scaled_dimensions(base_image.width, base_image.height, base_resize)
-        print('Rescaling base image to size ({}, {}). Scale of {}'.format(b_w, b_h, base_resize))
+        logging.info('Rescaling base image to size ({}, {}). Scale of {}'.format(b_w, b_h, base_resize))
         base_image = base_image.resize((b_w, b_h))
     if secret_resize != 1.0:
         assert secret_resize > 0
         s_w, s_h = calculate_scaled_dimensions(secret_image.width, secret_image.height, secret_resize)
-        print('Rescaling secret image to size ({}, {}). Scale of {}'.format(s_w, s_h, secret_resize))
+        logging.info('Rescaling secret image to size ({}, {}). Scale of {}'.format(s_w, s_h, secret_resize))
         secret_image = secret_image.resize((s_w, s_h))
 
     modes = check_supported_modes(base_image, secret_image)
     mode = None
     if force_jpeg:
-        mode = JpegEncodingMethod
+        mode = JpegEncoder
     # We should resize if needed
     elif base_resize_lossless or secret_resize_lossless:
         # Check if we need to even resize one of the images
-        if LosslessEncoding not in modes:
-            required_scale = calculate_scale_factor(base_image, secret_image, LosslessEncoding)
+        if LossyEncoder not in modes:
+            required_scale = calculate_scale_factor(base_image, secret_image, LossyEncoder)
             assert required_scale > 1.0
             if base_resize_lossless:
                 # Rather resize the base image than to downside the secret
                 nw, nh = calculate_scaled_dimensions(base_image.width, base_image.height, required_scale)
-                print('Creating a new resized base image of size ({0:d}, {0:d}) to fit lossless (scale of {0:.2f}).'.format(nw, nh, required_scale))
+                logging.info('Creating a new resized base image of size ({0:d}, {0:d}) to fit lossless (scale of {0:.2f}).'.format(nw, nh, required_scale))
                 base_image = base_image.resize((nw, nh))
             else:
                 nw, nh = calculate_scaled_dimensions(base_image.width, base_image.height, 1.0 / required_scale)
-                print('Creating a new resized secret image of size ({0:d}, {0:d}) to fit lossless (scale of {0:.2f}).'.format(nw, nh, 1.0 / required_scale))
+                logging.info('Creating a new resized secret image of size ({0:d}, {0:d}) to fit lossless (scale of {0:.2f}).'.format(nw, nh, 1.0 / required_scale))
                 secret_image = secret_image.resize((nw, nh))
 
-        mode = LosslessEncoding
+        mode = LossyEncoder
     else:
-        if LosslessEncoding in modes:
-            mode = LosslessEncoding
-        elif LossyEncoding in modes:
-            mode = LossyEncoding
+        if LossyEncoder in modes:
+            mode = LossyEncoder
+        elif LossyEncoder in modes:
+            mode = LossyEncoder
         else:
             raise ValueError('Base image is not big enough to hide even when using lossy. No resize option specified')
 
-    print('Using n = {} with method {} - filling with noise'.format(4, mode))
-    merged_image = mode.hide(base_image, secret_image, add_noise=True, engrave_method=True)
+    logging.info('Using n = {} with method {} - filling with noise'.format(4, mode))
+    encoder = mode()
+    merged_image = encoder.hide(base_image, secret_image, add_noise=True, engrave_method=True)
     merged_image.save(output)
 
 @cli.command()
@@ -124,14 +144,15 @@ def reveal(base, output):
     base_image = Image.open(base)
     method = compute_method_used(base_image)
     if method is not None:
-        unmerged_image = method.reveal(base_image)
+        encoder = method()
+        unmerged_image = encoder.reveal(base_image)
     kwargs = dict()
-    if method == JpegEncodingMethod:
+    if method == JpegEncoder:
         kwargs['quality'] = 100
         kwargs['optimize'] = True
         if output.endswith('.png'):
             output = '{}.jpg'.format(output[:-4])
-            print('Original image was jpeg encoded, saving as {}'.format(output))
+            logging.info('Original image was jpeg encoded, saving as {}'.format(output))
     unmerged_image.save(output, **kwargs)
 
 @cli.command()
@@ -141,8 +162,13 @@ def reveal(base, output):
 @click.option('--lossy/--lossless', default=False, help='If the output should be lossy or lossless')
 @click.option('--fill-with-noise/--no-noise', default=False, help='If the leftover space should contain noise')
 def merge(img1, img2, output, lossy, fill_with_noise):
-    print('Using n = {} with method {} - {}'.format(4, 'lossy' if lossy else 'lossless', 'filling with noise' if fill_with_noise else 'no noise'))
-    merged_image = merge_with_dims(Image.open(img1), Image.open(img2), lossy=lossy, add_noise=fill_with_noise)
+    logging.info('Using n = {} with method {} - {}'.format(4, 'lossy' if lossy else 'lossless', 'filling with noise' if fill_with_noise else 'no noise'))
+    try:
+        merged_image = merge_with_dims(Image.open(img1), Image.open(img2), lossy=lossy, add_noise=fill_with_noise)
+    except AssertionError as e:
+        logging.error('Assertion error while merging.')
+        logging.error(e)
+        exit(1)
     merged_image.save(output)
 
 
