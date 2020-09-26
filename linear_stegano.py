@@ -48,9 +48,9 @@ def cli():
 
 # TODO: Force lossy/lossless mode
 @cli.command()
-@click.option('--base', required=True, type=str, help='Image that will hide another image')
-@click.option('--secret', required=True, type=str, help='Image that will be hidden')
-@click.option('--output', required=False, type=str, help='Output image')
+@click.option('--base', required=True, type=click.Path(exists=True, dir_okay=False), help='Image that will hide another image')
+@click.option('--secret', required=True, type=click.Path(exists=True, dir_okay=False), help='Image that will be hidden')
+@click.option('--output', required=False, type=click.Path(), help='Output image')
 @click.option('--base-resize', required=False, type=float, default=1.0, help='Resize to apply to input image regardless of options specified.')
 @click.option('--secret-resize', required=False, type=float, default=1.0, help='Resize to apply to input image regardless of options specified.')
 @click.option('--base-resize-lossless', is_flag=True, type=bool, help='Resize the input image (bigger) so that lossless secret can be hidden. No resize is done if the data would already fit.')
@@ -117,8 +117,8 @@ def hide(ctx, base, secret, output, base_resize_lossless, force_jpeg, secret_res
         merged_image.save(output)
 
 @cli.command()
-@click.option('--base', required=True, type=str, help='Image containing secret')
-@click.option('--output', required=False, type=str, help='Output image')
+@click.option('--base', required=True, type=click.Path(exists=True, dir_okay=False), help='Image containing secret')
+@click.option('--output', required=False, type=click.Path(), help='Output image')
 @click.pass_context
 def reveal(ctx, base, output):
     for param in ctx.params.items():
