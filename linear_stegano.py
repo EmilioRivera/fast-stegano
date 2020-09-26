@@ -13,36 +13,6 @@ logging.basicConfig(
     format='%(asctime)s.%(msecs)03d %(funcName)18s: %(message)s',
 )
 
-def merge_with_dims(base, secret, lossy, add_noise, engrave_method=False):
-    mode = LossyEncoder if lossy else LosslessEncoder
-    encoder = mode()
-    logging.info('Parameter {}: {}'.format('base', base))
-    logging.info('Parameter {}: {}'.format('secret', secret))
-    logging.info('Parameter {}: {}'.format('lossy', lossy))
-    logging.info('Parameter {}: {}'.format('lossy', lossy))
-    logging.info('Parameter {}: {}'.format('add_noise', add_noise))
-    logging.info('Parameter {}: {}'.format('engrave_method', engrave_method))
-    logging.info(f'Using encoder {encoder}')
-    fake = encoder.hide(base, secret, add_noise, engrave_method)
-    return fake
-
-
-def unmerge_with_dims(base, lossy, read_method=False):
-    logging.info('Parameter {}: {}'.format('base', base))
-    logging.info('Parameter {}: {}'.format('lossy', lossy))
-    logging.info('Parameter {}: {}'.format('read_method', read_method))
-    if read_method:
-        method = compute_method_used(base)
-        assert method is not None
-        lossy = engraved_bit == METHOD_LOSSY
-    else:
-        method = LossyEncoder if lossy else LosslessEncoder
-    encoder = method()
-    logging.info(f'Using decoder {encoder}')
-    revealed = encoder.reveal(base)
-    return revealed
-
-
 def filename_if_missing(input_file_path, suffix):
     bn = input_file_path.stem
     output = '{}_{}.png'.format(bn, suffix)
@@ -76,6 +46,7 @@ def check_supported_modes(base, secret):
 def cli():
     pass
 
+# TODO: Force lossy/lossless mode
 @cli.command()
 @click.option('--base', required=True, type=str, help='Image that will hide another image')
 @click.option('--secret', required=True, type=str, help='Image that will be hidden')
@@ -85,7 +56,8 @@ def cli():
 @click.option('--base-resize-lossless', is_flag=True, type=bool, help='Resize the input image (bigger) so that lossless secret can be hidden. No resize is done if the data would already fit.')
 @click.option('--secret-resize-lossless', is_flag=True, type=bool, help='Resize the input image (smaller) so that lossless secret can be hidden. No resize is done if the data would already fit.')
 @click.option('--force-jpeg', is_flag=True, type=bool, help='Save the jpeg of the secret to save space')
-def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_lossless, base_resize, secret_resize):
+@click.option('--fill-with-noise/--no-noise', default=False, help='If the leftover space should contain noise')
+def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_lossless, base_resize, secret_resize, fill_with_noise):
     if output is None:
         output = filename_if_missing(Path(secret), 'hidden')
     
@@ -132,8 +104,14 @@ def hide(base, secret, output, base_resize_lossless, force_jpeg, secret_resize_l
 
     logging.info('Using n = {} with method {} - filling with noise'.format(4, mode))
     encoder = mode()
-    merged_image = encoder.hide(base_image, secret_image, add_noise=True, engrave_method=True)
-    merged_image.save(output)
+    try:
+        merged_image = encoder.hide(base_image, secret_image, add_noise=fill_with_noise, engrave_method=True)
+    except AssertionError as e:
+        logging.error('Assertion error while merging.')
+        logging.error(e)
+        exit(1)
+    else:
+        merged_image.save(output)
 
 @cli.command()
 @click.option('--base', required=True, type=str, help='Image containing secret')
@@ -154,33 +132,6 @@ def reveal(base, output):
             output = '{}.jpg'.format(output[:-4])
             logging.info('Original image was jpeg encoded, saving as {}'.format(output))
     unmerged_image.save(output, **kwargs)
-
-@cli.command()
-@click.option('--img1', required=True, type=str, help='Image that will hide another image')
-@click.option('--img2', required=True, type=str, help='Image that will be hidden')
-@click.option('--output', required=True, type=str, help='Output image')
-@click.option('--lossy/--lossless', default=False, help='If the output should be lossy or lossless')
-@click.option('--fill-with-noise/--no-noise', default=False, help='If the leftover space should contain noise')
-def merge(img1, img2, output, lossy, fill_with_noise):
-    logging.info('Using n = {} with method {} - {}'.format(4, 'lossy' if lossy else 'lossless', 'filling with noise' if fill_with_noise else 'no noise'))
-    try:
-        merged_image = merge_with_dims(Image.open(img1), Image.open(img2), lossy=lossy, add_noise=fill_with_noise)
-    except AssertionError as e:
-        logging.error('Assertion error while merging.')
-        logging.error(e)
-        exit(1)
-    merged_image.save(output)
-
-
-@cli.command()
-@click.option('--img', required=True, type=str, help='Image that will be hidden')
-@click.option('--output', required=True, type=str, help='Output image')
-@click.option('--lossy/--lossless', default=False, help='If the hidden image is lossy or lossless')
-def unmerge(img, output, lossy):
-    unmerged_image = unmerge_with_dims(Image.open(img), lossy=lossy)
-    unmerged_image.save(output)
-
-
 
 if __name__ == "__main__":
     cli()

@@ -25,10 +25,9 @@ for n in "${MSB_VALUES[@]}"; do
     python stegano.py unmerge --img "test/concealed_${n}.png" --output "test/reconstructed_${n}.png" -n "$n"
 done
 
+# TODO: Force lossy/lossless mode
 echo "Linear method tests..."
-for detail in "lossy" "lossless"; do
-    for noise in "fill-with-noise" "no-noise"; do
-        python linear_stegano.py merge --img1 "$INPUT_FILE" --img2 "$CONCEAL_FILE" "--$detail" "--$noise" --output "test/concealed_${detail}_${noise}.png"
-        python linear_stegano.py unmerge --img "test/concealed_${detail}_${noise}.png" "--$detail" --output "test/reconstructed_${detail}_${noise}.png"
-    done
+for noise in "fill-with-noise" "no-noise"; do
+    python linear_stegano.py hide --base "$INPUT_FILE" --secret "$CONCEAL_FILE" "--$noise" --output "test/concealed_${detail}_${noise}.png"
+    python linear_stegano.py reveal --base "test/concealed_${detail}_${noise}.png" --output "test/reconstructed_${detail}_${noise}.png"
 done
