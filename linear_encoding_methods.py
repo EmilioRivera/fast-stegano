@@ -8,6 +8,11 @@ from linear_utils import np8_to_number_16, len_to_np8_16, np8_to_number_32, len_
 METHOD_LOSSLESS = 0x01
 METHOD_LOSSY    = 0x02
 
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s.%(msecs)03d %(funcName)18s: %(message)s',
+)
 
 class EncodingMethod(object):
     value = None
