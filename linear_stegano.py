@@ -46,7 +46,7 @@ def check_supported_modes(base, secret):
 def cli():
     pass
 
-# TODO: Force lossy/lossless mode
+# TODO: non-harcoded version of encoding methods
 @cli.command()
 @click.option('--base', required=True, type=click.Path(exists=True, dir_okay=False), help='Image that will hide another image')
 @click.option('--secret', required=True, type=click.Path(exists=True, dir_okay=False), help='Image that will be hidden')
@@ -55,10 +55,10 @@ def cli():
 @click.option('--secret-resize', required=False, type=float, default=1.0, help='Resize to apply to input image regardless of options specified.')
 @click.option('--base-resize-lossless', is_flag=True, type=bool, help='Resize the input image (bigger) so that lossless secret can be hidden. No resize is done if the data would already fit.')
 @click.option('--secret-resize-lossless', is_flag=True, type=bool, help='Resize the input image (smaller) so that lossless secret can be hidden. No resize is done if the data would already fit.')
-@click.option('--force-jpeg', is_flag=True, type=bool, help='Save the jpeg of the secret to save space')
+@click.option('--use-method', type=click.Choice(['auto', 'lossy', 'lossless', 'jpeg'], case_sensitive=False),  default='auto', help='Force a method of steganography over the automatically chosen one.')
 @click.option('--fill-with-noise/--no-noise', default=False, help='If the leftover space should contain noise')
 @click.pass_context
-def hide(ctx, base, secret, output, base_resize_lossless, force_jpeg, secret_resize_lossless, base_resize, secret_resize, fill_with_noise):
+def hide(ctx, base, secret, output, base_resize_lossless, use_method, secret_resize_lossless, base_resize, secret_resize, fill_with_noise):
     for param in ctx.params.items():
         logging.info('Using parameter {}: {}'.format(*param))
     if output is None:
@@ -78,8 +78,11 @@ def hide(ctx, base, secret, output, base_resize_lossless, force_jpeg, secret_res
 
     modes = check_supported_modes(base_image, secret_image)
     mode = None
-    if force_jpeg:
-        mode = JpegEncoder
+    if use_method != 'auto':
+        logging.info(f'Using the forced method {use_method}')
+        if use_method == 'lossy': method = LossyEncoder
+        elif use_method == 'lossless': method = LosslessEncoder
+        elif use_method == 'jpeg': method = JpegEncoder
     # We should resize if needed
     elif base_resize_lossless or secret_resize_lossless:
         # Check if we need to even resize one of the images
